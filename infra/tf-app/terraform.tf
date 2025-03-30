@@ -1,4 +1,5 @@
 terraform {
+  required_version = ">= 1.3.0"
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -11,13 +12,11 @@ terraform {
     storage_account_name = "bhun0002bhup0006"
     container_name       = "tfstate"
     key                  = "prod.app.tfstate"
-    use_oidc             = true  # Enable OIDC authentication
+    use_oidc             = true # Enable OIDC authentication
   }
-
-  required_version = ">= 1.3.0"
 }
 
 provider "azurerm" {
   features {}
-  use_oidc = true  # Enable OIDC authentication
+  use_oidc = true # Enable OIDC authentication
 }
