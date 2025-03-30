@@ -11,6 +11,7 @@ terraform {
     storage_account_name = "bhun0002bhup0006"
     container_name       = "tfstate"
     key                  = "prod.app.tfstate"
+    use_oidc             = true  # Enable OIDC authentication
   }
 
   required_version = ">= 1.3.0"
@@ -18,4 +19,5 @@ terraform {
 
 provider "azurerm" {
   features {}
+  use_oidc = true  # Enable OIDC authentication
 }
