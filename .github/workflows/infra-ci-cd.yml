@@ -20,6 +20,35 @@ defaults:
     working-directory: ./infra/tf-app  
 
 jobs:
+  tflint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Cache plugin dir
+        uses: actions/cache@v4
+        with:
+          path: ~/.tflint.d/plugins
+          key: tflint-${{ hashFiles('.tflint.hcl') }}
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Show version
+        run: tflint --version
+
+      - name: Init TFLint
+        run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Run TFLint
+        id: tflint
+        run: tflint -f compact
+
   terraform-plan:
     name: 'Terraform Plan'
     runs-on: ubuntu-latest
@@ -57,16 +86,52 @@ jobs:
             exit 0
           fi
 
-      # Debugging step: Ensure tfplan exists
       - name: List files before uploading artifact
-        run: ls -la
+        run: ls -la ./infra/tf-app
 
       - name: Publish Terraform Plan
         uses: actions/upload-artifact@v4
         with:
           name: tfplan
           path: ./infra/tf-app/tfplan
-          retention-days: 7  
+          retention-days: 7
+
+      - name: Create String Output
+        id: tf-plan-string
+        run: |
+          TERRAFORM_PLAN=$(terraform show -no-color ./infra/tf-app/tfplan)
+          delimiter="$(openssl rand -hex 8)"
+          echo "summary<<${delimiter}" >> $GITHUB_OUTPUT
+          echo "## Terraform Plan Output" >> $GITHUB_OUTPUT
+          echo "<details><summary>Click to expand</summary>" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo '```terraform' >> $GITHUB_OUTPUT
+          echo "$TERRAFORM_PLAN" >> $GITHUB_OUTPUT
+          echo '```' >> $GITHUB_OUTPUT
+          echo "</details>" >> $GITHUB_OUTPUT
+          echo "${delimiter}" >> $GITHUB_OUTPUT
+
+      - name: Publish Terraform Plan to Task Summary
+        env:
+          SUMMARY: ${{ steps.tf-plan-string.outputs.summary }}
+        run: |
+          echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+
+      - name: Push Terraform Output to PR
+        if: github.ref != 'refs/heads/main'
+        uses: actions/github-script@v7
+        env:
+          SUMMARY: "${{ steps.tf-plan-string.outputs.summary }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `${process.env.SUMMARY}`;
+            github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+            })
 
   terraform-apply:
     name: 'Terraform Apply'
@@ -89,10 +154,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tfplan
-          path: ./infra/tf-app  # Ensure it downloads to the correct working directory
+          path: ./infra/tf-app
 
-      - name: List files after downloading tfplan
-        run: ls -la ./infra/tf-app  # Debugging step
+      - name: List files after downloading artifact
+        run: ls -la ./infra/tf-app
 
       - name: Terraform Apply
         run: terraform apply -auto-approve ./infra/tf-app/tfplan
